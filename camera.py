@@ -1,62 +1,3 @@
-# print("เริ่มโปรแกรมแล้ว...")
-
-# import cv2
-
-# rtsp_url = "rtsp://YaHPwvyz:fGY7os86XYWKNNMA@192.168.1.39:554/live/ch0"
-# cap = cv2.VideoCapture(rtsp_url)
-
-# if not cap.isOpened():
-#     print("เปิดกล้องไม่สำเร็จ")
-#     exit()
-
-# print("เปิดกล้องสำเร็จ! กำลังแสดงภาพ...")
-
-# while True:
-#     ret, frame = cap.read()
-#     if not ret:
-#         print("ดึงภาพไม่ได้")
-#         break
-
-#     # ⭐ ย่อขนาด เช่น เหลือ 640x360
-#     frame_small = cv2.resize(frame, (1280, 720))
-
-#     cv2.imshow("IP Camera Stream", frame_small)
-
-#     if cv2.waitKey(1) & 0xFF == ord('q'):
-#         break
-
-# cap.release()
-# cv2.destroyAllWindows()
-
-
-# import cv2
-# from flask import Flask, Response
-# from flask_cors import CORS
-
-# app = Flask(__name__)
-# CORS(app)
-
-# rtsp_url = "rtsp://YaHPwvyz:fGY7os86XYWKNNMA@192.168.1.39:554/live/ch0"
-
-# def generate_frames():
-#     cap = cv2.VideoCapture(rtsp_url)
-#     while True:
-#         ret, frame = cap.read()
-#         if not ret:
-#             continue
-#         _, buffer = cv2.imencode('.jpg', frame)
-#         frame_bytes = buffer.tobytes()
-#         yield (b'--frame\r\n'
-#                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-# @app.route("/video_feed")
-# def video_feed():
-#     return Response(generate_frames(),
-#                     mimetype="multipart/x-mixed-replace; boundary=frame")
-
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=5000)
-
 import cv2
 import time
 import threading
@@ -130,7 +71,7 @@ def yolo_thread():
 thread = threading.Thread(target=yolo_thread, daemon=True)
 thread.start()
 
-print("อ่านภาพจากกล้อง")
+print("อ่านภาพจากกล้อง ได้แล้ว กด 'q' เพื่อออก")
 
 while True:
     ret, frame = cap.read()
