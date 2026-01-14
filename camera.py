@@ -71,7 +71,7 @@ def yolo_thread():
 thread = threading.Thread(target=yolo_thread, daemon=True)
 thread.start()
 
-print("อ่านภาพจากกล้อง")
+print("อ่านภาพจากกล้อง ได้แล้ว กด 'q' เพื่อออก")
 
 while True:
     ret, frame = cap.read()
