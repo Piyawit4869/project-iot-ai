@@ -12,6 +12,9 @@ import numpy as np
 import cv2
 import requests
 
+from fastapi import WebSocket
+import asyncio
+
 from fastapi import FastAPI, Response, HTTPException, Header, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
@@ -30,16 +33,20 @@ CONFIG_PATH = DATA_DIR / "config.json"
 DB_PATH = DATA_DIR / "access.db"
 CSV_PATH = DATA_DIR / "access_log.csv"
 
-ESP32CAM_IP = os.getenv("ESP32CAM_IP", "192.168.1.201")
+# ESP32CAM_IP = os.getenv("ESP32CAM_IP", "192.168.1.201")
+ESP32CAM_IP = os.getenv("ESP32CAM_IP", "192.168.43.45")
 ESP32CAM_STREAM_PORT = int(os.getenv("ESP32CAM_STREAM_PORT", "81"))
 ESP32CAM_STREAM_PATH = os.getenv("ESP32CAM_STREAM_PATH", "/stream")
 
-ESP32CTRL_IP = os.getenv("ESP32CTRL_IP", "192.168.1.202")
+# ESP32CTRL_IP = os.getenv("ESP32CTRL_IP", "192.168.1.202")
+ESP32CTRL_IP = os.getenv("ESP32CTRL_IP", "192.168.43.3")
 ESP32CTRL_PORT = int(os.getenv("ESP32CTRL_PORT", "80"))
 ESP32CTRL_UNLOCK_PATH = os.getenv("ESP32CTRL_UNLOCK_PATH", "/unlock")
+ESP32CTRL_LOCK_PATH = os.getenv("ESP32CTRL_LOCK_PATH", "/lock")
 
 ESP32CAM_STREAM_URL = f"http://{ESP32CAM_IP}:{ESP32CAM_STREAM_PORT}{ESP32CAM_STREAM_PATH}"
 ESP32_UNLOCK_URL = f"http://{ESP32CTRL_IP}:{ESP32CTRL_PORT}{ESP32CTRL_UNLOCK_PATH}"
+ESP32_LOCK_URL = f"http://{ESP32CTRL_IP}:{ESP32CTRL_PORT}{ESP32CTRL_LOCK_PATH}"
 
 # =========================
 # DEFAULT RUNTIME SETTINGS (จะถูก override ด้วย config.json)
@@ -306,7 +313,7 @@ def camera_reader():
 threading.Thread(target=camera_reader, daemon=True).start()
 
 # =========================
-# VERIFY / UNLOCK
+# VERIFY / UNLOCK / LOCK
 # =========================
 verify_lock = threading.Lock()
 last_trigger_ts = 0.0
@@ -319,6 +326,16 @@ def do_unlock(name: str, ms: int = 3000) -> bool:
         with state_lock:
             status["last_error"] = f"unlock failed: {e}"
         push_event({"type": "error", "message": f"unlock failed: {e}"})
+        return False
+    
+def do_lock() -> bool:
+    try:
+        requests.get(ESP32_LOCK_URL, timeout=2.0)
+        return True
+    except Exception as e:
+        with state_lock:
+            status["last_error"] = f"lock failed: {e}"
+        push_event({"type": "error", "message": f"lock failed: {e}"})
         return False
 
 def verify_once(trigger: str = "manual"):
@@ -408,7 +425,9 @@ def verify_once(trigger: str = "manual"):
             res = {"ok": True, "name": best_name, "sim": float(best_sim), "unlock": unlock_ok, "trigger": trigger}
             log_access(True, best_name, float(best_sim), None, trigger, unlock_ok)
         else:
-            res = {"ok": False, "name": best_name, "sim": float(best_sim), "reason": "low_sim", "trigger": trigger}
+            lock_ok = do_lock()
+
+            res = {"ok": False, "name": best_name, "sim": float(best_sim), "reason": "low_sim", "trigger": trigger, "lock_ok": lock_ok}
             log_access(False, best_name, float(best_sim), "low_sim", trigger, None)
 
         with state_lock:
@@ -519,6 +538,23 @@ def stream_jpg(
     if not jpg:
         raise HTTPException(503, "No frame yet")
     return Response(content=jpg, media_type="image/jpeg")
+
+@app.websocket("/ws/stream")
+async def ws_stream(ws: WebSocket):
+    await ws.accept()
+    print("[WS] client connected")
+
+    try:
+        while True:
+            with state_lock:
+                frame = latest_jpeg
+
+            if frame:
+                await ws.send_bytes(frame)
+
+            await asyncio.sleep(0.05)  # ~20 FPS
+    except Exception as e:
+        print("[WS] disconnected", e)
 
 @app.get("/events")
 def sse_events(
